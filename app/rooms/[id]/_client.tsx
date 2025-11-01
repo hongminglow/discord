@@ -36,7 +36,7 @@ export function RoomClient({
     triggerQueryRef,
   } = useInfiniteScrollChat({
     roomId: room.id,
-    startingMessages: messages.toReversed(),
+    startingMessages: [...messages].reverse(),
   });
   const [sentMessages, setSentMessages] = useState<
     (Message & { status: "pending" | "error" | "success" })[]
