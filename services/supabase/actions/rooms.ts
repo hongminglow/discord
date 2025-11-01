@@ -1,100 +1,69 @@
-"use server"
+"use server";
 
-import z from "zod"
-import { createRoomSchema } from "../schemas/rooms"
-import { getCurrentUser } from "../lib/getCurrentUser"
-import { createAdminClient } from "../server"
-import { redirect } from "next/navigation"
+import z from "zod";
+import { createRoomSchema } from "../schemas/rooms";
+import { getCurrentUser } from "../lib/getCurrentUser";
+import { createAdminClient } from "../server";
+import { redirect } from "next/navigation";
 
 export async function createRoom(unsafeData: z.infer<typeof createRoomSchema>) {
-  const { success, data } = createRoomSchema.safeParse(unsafeData)
+  const { success, data } = createRoomSchema.safeParse(unsafeData);
 
   if (!success) {
-    return { error: true, message: "Invalid room data" }
+    return { error: true, message: "Invalid room data" };
   }
 
-  const user = await getCurrentUser()
+  const user = await getCurrentUser();
   if (user == null) {
-    return { error: true, message: "User not authenticated" }
+    return { error: true, message: "User not authenticated" };
   }
 
-  const supabase = createAdminClient()
+  const supabase = createAdminClient();
 
-  const { data: room, error: roomError } = await supabase
-    .from("chat_room")
-    .insert({ name: data.name, is_public: data.isPublic })
-    .select("id")
-    .single()
+  const { data: room, error: roomError } = await supabase.rpc(
+    "create_chat_room_with_owner",
+    {
+      p_owner_id: user.id,
+      p_name: data.name,
+      p_is_public: data.isPublic,
+    }
+  );
 
   if (roomError || room == null) {
-    return { error: true, message: "Failed to create room" }
+    return { error: true, message: "Failed to create room" };
   }
 
-  const { error: membershipError } = await supabase
-    .from("chat_room_member")
-    .insert({ chat_room_id: room.id, member_id: user.id })
-
-  if (membershipError) {
-    console.error(membershipError)
-    return { error: true, message: "Failed to add user to room" }
-  }
-
-  redirect(`/rooms/${room.id}`)
+  redirect(`/rooms/${room.id}`);
 }
 
 export async function addUserToRoom({
   roomId,
   userId,
 }: {
-  roomId: string
-  userId: string
+  roomId: string;
+  userId: string;
 }) {
-  const currentUser = await getCurrentUser()
+  const currentUser = await getCurrentUser();
   if (currentUser == null) {
-    return { error: true, message: "User not authenticated" }
+    return { error: true, message: "User not authenticated" };
   }
 
-  const supabase = createAdminClient()
+  const supabase = createAdminClient();
 
-  const { data: roomMembership, error: roomMembershipError } = await supabase
-    .from("chat_room_member")
-    .select("member_id")
-    .eq("chat_room_id", roomId)
-    .eq("member_id", currentUser.id)
-    .single()
+  const { data, error } = await supabase.rpc("invite_room_member", {
+    p_actor_id: currentUser.id,
+    p_room_id: roomId,
+    p_member_id: userId,
+  });
 
-  if (roomMembershipError || !roomMembership) {
-    return { error: true, message: "Current user is not a member of the room" }
+  if (error) {
+    console.error(error);
+    return { error: true, message: error.message };
   }
 
-  const { data: userProfile } = await supabase
-    .from("user_profile")
-    .select("id")
-    .eq("id", userId)
-    .single()
-
-  if (userProfile == null) {
-    return { error: true, message: "User not found" }
+  if (!data) {
+    return { error: true, message: "User is already a member of the room" };
   }
 
-  const { data: existingMembership } = await supabase
-    .from("chat_room_member")
-    .select("member_id")
-    .eq("chat_room_id", roomId)
-    .eq("member_id", userProfile.id)
-    .single()
-
-  if (existingMembership) {
-    return { error: true, message: "User is already a member of the room" }
-  }
-
-  const { error: insertError } = await supabase
-    .from("chat_room_member")
-    .insert({ chat_room_id: roomId, member_id: userProfile.id })
-
-  if (insertError) {
-    return { error: true, message: "Failed to add user to room" }
-  }
-
-  return { error: false, message: "User added to room successfully" }
+  return { error: false, message: "User added to room successfully" };
 }
