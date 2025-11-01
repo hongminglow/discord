@@ -223,7 +223,20 @@ function useInfiniteScrollChat({
       return;
     }
 
-    setMessages((prev) => [...data.toReversed(), ...prev]);
+    const validMessages: Message[] = data
+      .filter((msg) => msg.author_id && msg.author)
+      .map((msg) => ({
+        id: msg.id,
+        text: msg.text,
+        created_at: msg.created_at,
+        author_id: msg.author_id!,
+        author: {
+          name: msg.author!.name,
+          image_url: msg.author!.image_url,
+        },
+      }));
+
+    setMessages((prev) => [...validMessages.toReversed(), ...prev]);
     setStatus(data.length < LIMIT ? "done" : "idle");
   }
 

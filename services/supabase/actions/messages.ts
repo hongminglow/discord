@@ -43,7 +43,7 @@ export async function sendMessage(data: {
     return { error: true, message: "User is not a member of the chat room" };
   }
 
-  const { data: message, error } = await supabase
+  const { data: result, error } = await supabase
     .from("message")
     .insert({
       id: data.id,
@@ -56,13 +56,24 @@ export async function sendMessage(data: {
     )
     .single();
 
-  if (error) {
+  if (error || !result || !result.author_id || !result.author) {
     console.error("sendMessage insert failed:", error);
     return {
       error: true,
       message: "Failed to send message",
     };
   }
+
+  const message: Message = {
+    id: result.id,
+    text: result.text,
+    created_at: result.created_at,
+    author_id: result.author_id,
+    author: {
+      name: result.author.name,
+      image_url: result.author.image_url,
+    },
+  };
 
   return { error: false, message };
 }
